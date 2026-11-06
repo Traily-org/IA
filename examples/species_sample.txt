@@ -1,0 +1,13 @@
+# Demo candidate list for scripts/identify_local.py — common Plantae only
+# (ADR 0002). NOT the real per-trail list, which will come from the GBIF cache
+# after the INPN protected-species filter. Replace with your own test species.
+Bellis perennis
+Taraxacum officinale
+Trifolium pratense
+Urtica dioica
+Plantago major
+Achillea millefolium
+Leucanthemum vulgare
+Papaver rhoeas
+Ranunculus acris
+Digitalis purpurea

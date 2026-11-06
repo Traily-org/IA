@@ -1,0 +1,8 @@
+torch~=2.14
+transformers~=5.19
+open_clip_torch~=3.3
+pillow~=12.3
+shapely~=2.2
+pyproj~=3.7
+httpx~=0.28
+numpy~=2.4
