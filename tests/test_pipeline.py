@@ -213,6 +213,58 @@ def test_models_are_loaded_once_even_when_the_settings_change(
     pipeline._bioclip.cache_clear()
 
 
+def test_a_single_candidate_still_gets_its_common_name() -> None:
+    pipeline = IdentificationPipeline(
+        None,
+        FakeClassifier([SpeciesScore("Quercus robur", 1.0)]),
+        common_names={"Quercus robur": "Chêne pédonculé"},
+    )
+
+    result = pipeline.identify(blank(), ["Quercus robur"])
+
+    assert result.abstained
+    assert result.alternatives[0].common_name == "Chêne pédonculé"
+
+
+def test_no_subject_detected_does_not_claim_a_crop_was_classified() -> None:
+    pipeline, classifier = make_pipeline(None, [SpeciesScore("a", 0.9)])
+
+    result = pipeline.identify(blank(), ["a", "b"])
+
+    assert result.abstain_reason == "no_subject_detected"
+    assert result.used_crop is False and classifier.crops == []
+
+
+def test_common_names_reach_the_result_through_the_public_entry_points(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from traily_ia import bioclip_classifier, pipeline
+
+    class Fixed:
+        def __init__(self, device: str | None = None) -> None:
+            pass
+
+        def classify(
+            self, crop: Image.Image, candidates: Sequence[str]
+        ) -> list[SpeciesScore]:
+            return [SpeciesScore("Quercus robur", 0.9), SpeciesScore("Ilex", 0.1)]
+
+    monkeypatch.setattr(bioclip_classifier, "BioClipClassifier", Fixed)
+    pipeline._bioclip.cache_clear()
+    path = tmp_path / "p.jpg"
+    Image.new("RGB", (20, 20)).save(path)
+
+    result = detect_and_classify(
+        path,
+        ["Quercus robur", "Ilex"],
+        confidence_threshold=0.5,
+        common_names={"Quercus robur": "Chêne pédonculé"},
+    )
+
+    assert result.common_name == "Chêne pédonculé"
+    pipeline._bioclip.cache_clear()
+
+
 def test_degenerate_box_still_yields_a_valid_crop() -> None:
     sliver = BoundingBox(x_min=10.2, y_min=20.2, x_max=10.4, y_max=20.4)
     pipeline, classifier = make_pipeline(

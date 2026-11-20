@@ -21,6 +21,7 @@ from traily_ia import DEFAULT_CONFIDENCE_THRESHOLD, IdentificationResult
 from traily_ia.annotate import annotate_image
 from traily_ia.pipeline import build_default_pipeline, detect_and_classify, load_image
 from traily_ia.species import load_species_file
+from traily_ia.trail_species.vernacular import load_french_names
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -38,9 +39,9 @@ def format_line(name: str, result: IdentificationResult, seconds: float) -> str:
         verdict = f"ABSTAIN ({result.abstain_reason})"
         if result.alternatives:
             top = result.alternatives[0]
-            verdict += f" best guess: {top.species}"
+            verdict += f" best guess: {top.common_name or top.species}"
     else:
-        verdict = str(result.species)
+        verdict = f"{result.common_name or result.species}"
     b = result.bbox
     coords = (
         ""
@@ -103,6 +104,13 @@ def main() -> int:
         "similarity is below this (about 0.71 for BioCLIP 2, 0.29 for BioCLIP 1); "
         "off by default",
     )
+    parser.add_argument(
+        "--french-names",
+        type=Path,
+        default=Path("data/species_lists/french_names.json"),
+        help="scientific name -> French common name, shown instead of the scientific "
+        "name when present (build it with scripts/build_french_names.py)",
+    )
     parser.add_argument("--device", default=None, help="cpu / cuda (default: auto)")
     parser.add_argument("--annotate", type=Path, help="write images with boxes here")
     parser.add_argument("--json", action="store_true", help="print JSON, not a table")
@@ -119,6 +127,7 @@ def main() -> int:
             f"no images ({', '.join(sorted(IMAGE_SUFFIXES))}) in {args.folder}"
         )
 
+    names = load_french_names(args.french_names) if args.french_names.exists() else {}
     print(f"Loading models (device={args.device or 'auto'})...", file=sys.stderr)
     pipeline = build_default_pipeline(
         device=args.device,
@@ -129,6 +138,7 @@ def main() -> int:
             None if args.crop_min_fraction is not None else args.crop_retry_below
         ),
         always_detect=args.box_on_every_photo,
+        common_names=names,
         use_detector=(
             args.detector
             or args.box_on_every_photo

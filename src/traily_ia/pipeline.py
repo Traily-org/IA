@@ -19,6 +19,7 @@ from traily_ia.result import (
     AbstainReason,
     BoundingBox,
     IdentificationResult,
+    SpeciesScore,
 )
 
 # Temporary value until real hiker photos allow a calibration: on 1,233 unseen
@@ -122,6 +123,13 @@ class IdentificationPipeline:
     def classifier(self) -> Classifier:
         return self._classifier
 
+    def _with_common_names(self, scores: list[SpeciesScore]) -> list[SpeciesScore]:
+        if not self._common_names:
+            return scores
+        return [
+            replace(s, common_name=self._common_names.get(s.species)) for s in scores
+        ]
+
     def identify(
         self,
         image: Image.Image,
@@ -150,6 +158,7 @@ class IdentificationPipeline:
                 detection_score=0.0,
                 image_width=width,
                 image_height=height,
+                used_crop=False,  # nothing was classified
             )
 
         use_crop = (
@@ -158,7 +167,7 @@ class IdentificationPipeline:
             and detection.box.width * detection.box.height >= fraction * width * height
         )
         region = _crop(image, detection.box) if use_crop and detection else image
-        scores = self._classifier.classify(region, candidates)
+        scores = self._with_common_names(self._classifier.classify(region, candidates))
         if len(candidates) == 1:
             # A softmax over one name is always 1.0: the confidence is undefined, so
             # never answer (CLAUDE.md: never guess).
@@ -183,12 +192,8 @@ class IdentificationPipeline:
                     _crop(image, detection.box), candidates
                 )
                 if crop_scores[0].score > scores[0].score:
-                    scores, use_crop = crop_scores, True
-        if self._common_names:
-            scores = [
-                replace(s, common_name=self._common_names.get(s.species))
-                for s in scores
-            ]
+                    scores = self._with_common_names(crop_scores)
+                    use_crop = True
         best = scores[0]
         unknown = (
             self._min_similarity is not None
@@ -237,6 +242,7 @@ def build_default_pipeline(
     crop_retry_below: float | None = DEFAULT_CROP_RETRY_BELOW,
     always_detect: bool = False,
     use_detector: bool = False,
+    common_names: Mapping[str, str] | None = None,
 ) -> IdentificationPipeline:
     """Build the pipeline with the current default models (loaded lazily).
 
@@ -268,6 +274,7 @@ def build_default_pipeline(
         min_similarity=min_similarity,
         crop_retry_below=crop_retry_below,
         always_detect=always_detect,
+        common_names=common_names,
     )
 
 
@@ -283,6 +290,7 @@ def detect_and_classify(
     crop_retry_below: float | None = DEFAULT_CROP_RETRY_BELOW,
     always_detect: bool = False,
     use_detector: bool = False,
+    common_names: Mapping[str, str] | None = None,
 ) -> IdentificationResult:
     """Identify the main subject of one photo among `candidates`.
 
@@ -298,5 +306,6 @@ def detect_and_classify(
             crop_retry_below=crop_retry_below,
             always_detect=always_detect,
             use_detector=use_detector,
+            common_names=common_names,
         )
     return pipeline.identify(load_image(image_path), candidates)
