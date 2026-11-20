@@ -174,7 +174,7 @@ task lint   # black --check, isort --check, ruff check, mypy --strict src/, pyte
 task fmt    # apply black + isort + ruff fixes
 ```
 
-Last run (2026-11-06): formatting, lint and strict typing clean; **97 tests passed, 93%
+Last run (2026-11-20): formatting, lint and strict typing clean; **114 tests passed, 94%
 coverage** (the tests use fake stages, so they need no model weights).
 
 | Area | What the tests prove |
@@ -263,7 +263,7 @@ python scripts/build_inpn_index.py          # -> data/inpn/protected_plants.json
 - If the index is missing, `build_trail_species.py` stops. `--unfiltered` is the only
   way around it, and such lists are marked `none-UNFILTERED`.
 - `--scope local` (default) removes nationally protected species plus those protected in
-  the trail's own régions/départements; `--scope anywhere` removes anything protected
+  the régions/départements of the trail and of its 500 m corridor (so a border crossed only by the corridor counts); `--scope anywhere` removes anything protected
   anywhere in metropolitan France (strictest); `--scope national` only national.
 - The download links are temporary and no licence is stated (see `DATASET_LICENSES.md`).
 
