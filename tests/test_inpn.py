@@ -247,3 +247,55 @@ def test_index_build_refuses_a_zone_code_it_cannot_place(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="FR-ZZ"):
         build_protected_index(bdc, taxref, tmp_path / "i.json", source_url="x")
+
+
+def _build(
+    tmp_path: Path, bdc_member: str, taxref_member: str, bdc_rows: list[list[str]]
+) -> Path:
+    bdc = _zip(
+        tmp_path / "BDC.zip",
+        bdc_member,
+        _csv_text(BDC_COLUMNS, bdc_rows),
+        (2026, 3, 1, 0, 0, 0),
+    )
+    taxref = _zip(
+        tmp_path / "TAXREF.zip",
+        taxref_member,
+        _csv_text(TAXREF_COLUMNS, TAXREF_ROWS, delimiter="\t"),
+        (2026, 3, 1, 0, 0, 0),
+    )
+    out = tmp_path / "index.json"
+    build_protected_index(bdc, taxref, out, source_url="https://example.test/page")
+    return out
+
+
+def test_the_data_version_is_read_from_the_archive_not_hard_coded(
+    tmp_path: Path,
+) -> None:
+    out = _build(tmp_path, "BDC_19/bdc_19_01.csv", "TAXREFv19.txt", BDC_ROWS)
+
+    prov = json.loads(out.read_text(encoding="utf-8"))["provenance"]
+
+    assert prov["bdc"]["version"] == prov["taxref"]["version"] == "19"
+
+
+@pytest.mark.parametrize(
+    "territory",
+    [
+        "Saint-Pierre-et-Miquelon",
+        "Saint-Martin",
+        "Saint-Barthélemy",
+        "Terres australes et antarctiques françaises",
+        "Wallis-et-Futuna",
+        "Nouvelle-Calédonie",
+    ],
+)
+def test_every_overseas_territory_is_kept_out_of_metropolitan_lists(
+    tmp_path: Path, territory: str
+) -> None:
+    rows = [["Plantae", "PR", "3", "Metrosideros collina", territory, "X1", "FR-XX"]]
+
+    out = _build(tmp_path, "BDC_18/bdc_18_01.csv", "TAXREFv18.txt", rows)
+
+    f = InpnProtectionFilter.from_index(out, scope="anywhere")
+    assert not f.is_protected("Metrosideros collina")

@@ -42,7 +42,13 @@ OVERSEAS = {
     "Réunion",
     "Province Nord",
     "Province Sud",
+    "Nouvelle-Calédonie",
     "Polynésie française",
+    "Saint-Pierre-et-Miquelon",
+    "Saint-Martin",
+    "Saint-Barthélemy",
+    "Terres australes et antarctiques françaises",
+    "Wallis-et-Futuna",
 }
 SPECIES_RANK = "ES"
 STALE_AFTER_DAYS = 365
@@ -70,6 +76,12 @@ def _member(zf: zipfile.ZipFile, *, prefix: str, suffix: str) -> zipfile.ZipInfo
         if Path(i.filename).name.startswith(prefix) and i.filename.endswith(suffix)
     )
     return info
+
+
+def _version(member: zipfile.ZipInfo) -> str:
+    """Release number in the member's name (TAXREFv18.txt, bdc_18_01.csv)."""
+    found = re.search(r"(?:v|_)(\d+)", Path(member.filename).name)
+    return found.group(1) if found else "unknown"
 
 
 def _provenance(
@@ -166,8 +178,8 @@ def build_protected_index(
                 if row["RANG"] != SPECIES_RANK and row["CD_NOM"] == row["CD_REF"]:
                     aliases[_binomial(row["LB_NOM"])].add(row["CD_REF"])
 
-    bdc_prov = _provenance(bdc_zip, bdc_member, "18")
-    taxref_prov = _provenance(taxref_zip, taxref_member, "18")
+    bdc_prov = _provenance(bdc_zip, bdc_member, _version(bdc_member))
+    taxref_prov = _provenance(taxref_zip, taxref_member, _version(taxref_member))
 
     index: dict[str, object] = {
         "provenance": {

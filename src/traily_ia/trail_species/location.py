@@ -17,10 +17,17 @@ from pathlib import Path
 
 import httpx
 
-from traily_ia.trail_species.geometry import LonLat
+from traily_ia.trail_species.geometry import (
+    DEFAULT_BUFFER_M,
+    LonLat,
+    corridor_polygons,
+)
 
 GEO_API = "https://geo.api.gouv.fr"
 MAX_POINTS = 40
+# Points on the corridor's outline use a finer grid (~100 m): the outline is where the
+# trail's search area can cross a département border that the trace itself never does.
+BORDER_DECIMALS = 3
 # The BDC dataset still labels regional protections with the pre-2016 regions
 # (ISO 3166-2 codes), so each current region (INSEE code) maps to every ISO region
 # code that applies inside it, old and new.
@@ -55,12 +62,14 @@ class Location:
         return frozenset(codes)
 
 
-def sample_points(lines: Sequence[Sequence[LonLat]]) -> list[LonLat]:
-    """Distinct points (~1 km grid) of the trace, at most MAX_POINTS of them."""
+def sample_points(
+    lines: Sequence[Sequence[LonLat]], *, decimals: int = 2
+) -> list[LonLat]:
+    """Distinct points (~1 km grid by default) of the lines, at most MAX_POINTS."""
     seen: dict[tuple[float, float], LonLat] = {}
     for line in lines:
         for lon, lat in line:
-            seen.setdefault((round(lon, 2), round(lat, 2)), (lon, lat))
+            seen.setdefault((round(lon, decimals), round(lat, decimals)), (lon, lat))
     points = list(seen.values())
     if len(points) <= MAX_POINTS:
         return points
@@ -68,16 +77,33 @@ def sample_points(lines: Sequence[Sequence[LonLat]]) -> list[LonLat]:
     return [points[round(i * step)] for i in range(MAX_POINTS)]
 
 
+def search_points(
+    lines: Sequence[Sequence[LonLat]], *, buffer_m: float = DEFAULT_BUFFER_M
+) -> list[LonLat]:
+    """Points of the trace plus points of the corridor's outline.
+
+    GBIF searches up to `buffer_m` on each side of the trace, so a plant protected in
+    the neighbouring département must count when the corridor crosses the border even
+    though the trace itself does not.
+    """
+    outline = [
+        [(x, y) for x, y in polygon.exterior.coords]
+        for polygon in corridor_polygons(lines, buffer_m=buffer_m)
+    ]
+    return sample_points(lines) + sample_points(outline, decimals=BORDER_DECIMALS)
+
+
 def locate(
     lines: Sequence[Sequence[LonLat]], *, http: httpx.Client | None = None
 ) -> Location:
-    """Départements and régions of the trace, via geo.api.gouv.fr.
+    """Départements and régions of the trace and its corridor, via geo.api.gouv.fr.
 
     Raises if no point resolves to a metropolitan commune: the filter must never
     quietly fall back to "no protections apply".
     """
+    owns_client = http is None
     client = http or httpx.Client(base_url=GEO_API, timeout=30.0)
-    points = sample_points(lines)
+    points = search_points(lines)
 
     def lookup(point: LonLat) -> dict[str, str] | None:
         response = client.get(
@@ -92,8 +118,12 @@ def locate(
         found = response.json()
         return found[0] if found else None
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        communes = [c for c in pool.map(lookup, points) if c]
+    try:
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            communes = [c for c in pool.map(lookup, points) if c]
+    finally:
+        if owns_client:
+            client.close()
     departements = frozenset(c["codeDepartement"] for c in communes)
     regions = frozenset(c["codeRegion"] for c in communes)
     if not communes:
@@ -112,7 +142,7 @@ def locate_cached(
     http: httpx.Client | None = None,
 ) -> Location:
     """`locate`, remembered per trail (keyed on the sampled points)."""
-    points = sample_points(lines)
+    points = search_points(lines)
     key = hashlib.sha256(json.dumps(points).encode()).hexdigest()[:16]
     path = cache_dir / f"{trail_id}.json"
     if path.exists():

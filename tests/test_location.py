@@ -93,3 +93,51 @@ def test_locate_cached_calls_the_api_once_per_trail(tmp_path: Path) -> None:
 
     assert second == first
     assert len(seen) == calls
+
+
+def border_client(boundary_lon: float) -> httpx.Client:
+    """Département 35 west of `boundary_lon`, 22 east of it."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        west = float(request.url.params["lon"]) < boundary_lon
+        code = "35" if west else "22"
+        return httpx.Response(200, json=[{"codeDepartement": code, "codeRegion": "53"}])
+
+    return httpx.Client(
+        base_url="https://geo.test", transport=httpx.MockTransport(handler)
+    )
+
+
+def test_a_border_inside_the_corridor_but_not_on_the_trace_is_found() -> None:
+    # The trace stays in département 35; the border lies 300 m east of it, inside the
+    # 500 m corridor GBIF will search, so département 22's protections must apply too.
+    lines = [[(0.0, 48.0), (0.0, 48.01)]]
+
+    location = locate(lines, http=border_client(boundary_lon=0.004))
+
+    assert location.departements == {"35", "22"}
+
+
+def test_a_client_made_by_locate_is_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from traily_ia.trail_species import location as module
+
+    made: list[httpx.Client] = []
+    real_client = httpx.Client
+
+    def make(**kwargs: object) -> httpx.Client:
+        client = real_client(
+            base_url="https://geo.test",
+            transport=httpx.MockTransport(
+                lambda r: httpx.Response(
+                    200, json=[{"codeDepartement": "35", "codeRegion": "53"}]
+                )
+            ),
+        )
+        made.append(client)
+        return client
+
+    monkeypatch.setattr(module.httpx, "Client", make)
+
+    locate([[(0.0, 48.0), (0.0, 48.01)]])
+
+    assert made and all(c.is_closed for c in made)
