@@ -35,6 +35,7 @@ class SpeciesOccurrences:
 
 class GbifClient:
     def __init__(self, http: httpx.Client | None = None) -> None:
+        self._owns_http = http is None
         self._http = http or httpx.Client(
             base_url=GBIF_API,
             timeout=60.0,
@@ -42,9 +43,9 @@ class GbifClient:
         )
         self._names: dict[int, str] = {}
 
-    def _species_counts(
-        self, wkts: Sequence[str], min_year: int
-    ) -> list[tuple[int, int]]:
+    def _polygon_counts(self, wkt: str, min_year: int) -> list[tuple[int, int]]:
+        """Species counts inside one polygon: one request per polygon keeps the URL
+        short, however many disconnected parts the corridor has."""
         params: list[tuple[str, str | int]] = [
             ("taxonKey", PLANTAE_TAXON_KEY),
             ("hasCoordinate", "true"),
@@ -56,7 +57,7 @@ class GbifClient:
             ("facetLimit", FACET_PAGE_SIZE),
         ]
         params += [("basisOfRecord", b) for b in WILD_BASIS_OF_RECORD]
-        params += [("geometry", w) for w in wkts]
+        params.append(("geometry", wkt))
 
         counts: list[tuple[int, int]] = []
         offset = 0
@@ -71,6 +72,21 @@ class GbifClient:
             if len(page) < FACET_PAGE_SIZE:
                 return counts
             offset += FACET_PAGE_SIZE
+
+    def _species_counts(
+        self, wkts: Sequence[str], min_year: int
+    ) -> list[tuple[int, int]]:
+        # Corridors of one trail are disjoint polygons, so counts simply add up.
+        totals: dict[int, int] = {}
+        for wkt in wkts:
+            for key, count in self._polygon_counts(wkt, min_year):
+                totals[key] = totals.get(key, 0) + count
+        return list(totals.items())
+
+    def close(self) -> None:
+        """Close the HTTP client, unless the caller supplied (and owns) it."""
+        if self._owns_http:
+            self._http.close()
 
     def species_name(self, species_key: int) -> str:
         """Canonical name (no authorship) of a GBIF species key."""
@@ -93,8 +109,16 @@ class GbifClient:
         counts = self._species_counts(wkts, min_year)
         with ThreadPoolExecutor(max_workers=8) as pool:
             names = list(pool.map(self._canonical_name, (k for k, _ in counts)))
-        species = [
-            SpeciesOccurrences(key, name, n)
-            for (key, n), name in zip(counts, names, strict=True)
-        ]
-        return sorted(species, key=lambda s: -s.occurrences)
+        # Two GBIF keys can share one canonical name (a synonym, a split taxon): group
+        # by name so a species is listed once, with the records of all its keys.
+        by_name: dict[str, SpeciesOccurrences] = {}
+        for (key, n), name in zip(counts, names, strict=True):
+            seen = by_name.get(name)
+            if seen is None:
+                by_name[name] = SpeciesOccurrences(key, name, n)
+            else:
+                best = seen.species_key if seen.occurrences >= n else key
+                by_name[name] = SpeciesOccurrences(best, name, seen.occurrences + n)
+        return sorted(
+            by_name.values(), key=lambda s: (-s.occurrences, s.scientific_name)
+        )

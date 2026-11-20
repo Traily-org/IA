@@ -97,6 +97,46 @@ def test_gbif_pages_facets_and_resolves_names_once() -> None:
     assert sum(r.url.path.startswith("/v1/species/") for r in seen) == 1500  # cached
 
 
+def test_each_polygon_gets_its_own_short_request_and_counts_add_up() -> None:
+    gbif, seen = fake_gbif(
+        [(1, 10), (2, 5)], {1: "Quercus robur", 2: "Ilex aquifolium"}
+    )
+
+    species = gbif.plantae_species(
+        ["POLYGON((0 0, 1 0, 1 1, 0 0))", "POLYGON((5 5, 6 5, 6 6, 5 5))"]
+    )
+
+    searches = [r for r in seen if r.url.path.endswith("/occurrence/search")]
+    assert len(searches) == 2
+    assert all(len(r.url.params.get_list("geometry")) == 1 for r in searches)
+    assert {s.scientific_name: s.occurrences for s in species} == {
+        "Quercus robur": 20,
+        "Ilex aquifolium": 10,
+    }
+
+
+def test_two_gbif_keys_with_one_name_become_one_species() -> None:
+    gbif, _ = fake_gbif(
+        [(1, 10), (2, 7)], {1: "Rubus fruticosus", 2: "Rubus fruticosus"}
+    )
+
+    species = gbif.plantae_species(["POLYGON((0 0, 1 0, 1 1, 0 0))"])
+
+    assert [(s.scientific_name, s.occurrences, s.species_key) for s in species] == [
+        ("Rubus fruticosus", 17, 1)
+    ]
+
+
+def test_a_client_made_by_gbif_client_is_closed_but_a_given_one_is_not() -> None:
+    gbif, _ = fake_gbif([], {})
+    gbif.close()
+    assert not gbif._http.is_closed
+
+    owned = GbifClient()
+    owned.close()
+    assert owned._http.is_closed
+
+
 def test_build_removes_protected_species_and_reports_them(tmp_path: Path) -> None:
     gbif, _ = fake_gbif([(1, 50), (2, 5)], {1: "Bellis perennis", 2: "Orchis protecta"})
 
