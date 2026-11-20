@@ -1,0 +1,16 @@
+-r requirements.txt
+
+# Lint / type / test tooling (mirrors the CI checks in DEVELOPMENT_PROCESS.md)
+black~=26.10
+isort~=9.0
+ruff~=0.16
+mypy~=2.4
+pytest~=9.1
+pytest-cov~=7.1
+types-shapely  # stubs for mypy --strict
+
+# `task` runner (provides `task lint`) installed into the venv
+go-task-bin~=3.54
+
+# Install this repo's own package (src/traily_ia) so scripts/ and tests can import it
+-e .

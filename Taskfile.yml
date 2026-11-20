@@ -1,0 +1,31 @@
+version: "3"
+
+# Run inside the activated .venv (see README.md). `task` itself is installed
+# into the venv by requirements-dev.txt (go-task-bin).
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  lint:
+    desc: Everything the CI runs — formatting, lint, types, tests with coverage
+    cmds:
+      - black --check .
+      - isort --check .
+      - ruff check .
+      - mypy --strict src/
+      - pytest --cov
+
+  fmt:
+    desc: Apply black + isort + ruff autofixes
+    cmds:
+      - black .
+      - isort .
+      - ruff check --fix .
+
+  test:
+    desc: Run the test suite only
+    cmds:
+      - pytest --cov

@@ -216,3 +216,56 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# --- Traily IA: model weights & reference/training data ---
+*.pt
+*.onnx
+*.safetensors
+*.ckpt
+*.h5
+checkpoints/
+weights/
+
+# Downloaded or bulk reference/training images — never commit a full dataset,
+# only DATASET_LICENSES.md tracking where it came from. Adjust these folder
+# names if you end up calling them something else.
+data/
+datasets/
+reference_images/
+training_data/
+
+# Claude Code: personal/local-only settings, not meant to be shared with the team
+.claude/settings.local.json
+
+# --- Local-only working material (not shared with the team) ---
+# Personal decision journal and open-question notes (CLAUDE.md: kept locally).
+JOURNAL.md
+TO_ASK.md
+TO_CHECK.md
+# Meeting preparation and handover drafts.
+docs/handover-species-lists.md
+docs/licensing-for-the-meeting.md
+docs/PHOTO_DISTANCE_TEST.md
+# Personal AI dashboard: site, plans, generated tables, and the scripts and module that
+# build it. It embeds thumbnails of third-party photos, so it stays local.
+docs/dashboard/
+docs/results/
+scripts/build_dashboard_data.py
+scripts/build_examples.py
+scripts/build_example_response.py
+scripts/measure_code_health.py
+scripts/measure_cascade_real.py
+scripts/measure_retry_share.py
+src/traily_ia/dashboard_data.py
+tests/test_dashboard_data.py
+# First detector benchmark: pasted (synthetic) subjects, withdrawn as invalid.
+scripts/benchmark_detectors.py
+docs/eval/2026-10-30-detector-benchmark.md
+# Raw evaluation output (the dated .md reports are kept).
+docs/eval/*.json
+# Misc local files.
+out/
+.coverage
+# Personal permission setup: it holds absolute paths of this machine's checkouts.
+.claude/settings.json

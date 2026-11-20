@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "traily-ia"
+version = "0.1.0"
+description = "Traily IA — species identification, NSFW check & recommendation"
+readme = "README.md"
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+src_paths = ["src", "scripts", "tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "scripts", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Markdown table rows are long string literals that black cannot wrap.
+"scripts/eval_local.py" = ["E501"]
+"scripts/eval_open_set.py" = ["E501"]
+"scripts/benchmark_latency.py" = ["E501"]
+"scripts/benchmark_models.py" = ["E501"]
+"scripts/measure_winter_species.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+
+# open_clip ships no type information.
+[[tool.mypy.overrides]]
+module = ["open_clip", "open_clip.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.coverage.run]
+source = ["src/traily_ia"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
